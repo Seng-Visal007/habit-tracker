@@ -13,6 +13,12 @@ export type DailyLog = {
   created_at: string;
 };
 
+export type Profile = {
+  id: string;
+  avatar_url: string | null;
+  updated_at: string;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -28,6 +34,12 @@ export type Database = {
         Update: Partial<Omit<DailyLog, 'id'>>;
         Relationships: [];
       };
+      profiles: {
+        Row: Profile;
+        Insert: Partial<Omit<Profile, 'id'>> & { id: string };
+        Update: Partial<Profile>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -35,4 +47,3 @@ export type Database = {
     CompositeTypes: Record<string, never>;
   };
 };
-
