@@ -1,12 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import Auth from '@/pages/Auth';
-import Dashboard from '@/pages/Dashboard';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { UpdateToast } from '@/components/UpdateToast';
+
+// Dashboard is the authenticated, data-heavy route, so load it only when requested.
+const Dashboard = lazy(() => import('@/pages/Dashboard'));
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -49,17 +51,25 @@ export default function App() {
       <UpdateToast />
 
       <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={session ? <Navigate to="/" replace /> : <Auth />} />
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute session={session}>
-                <Dashboard session={session!} />
-              </ProtectedRoute>
-            }
-          />
-        </Routes>
+        <Suspense
+          fallback={
+            <div className="flex min-h-[50vh] items-center justify-center text-sm text-muted-foreground" role="status">
+              Loading your dashboard...
+            </div>
+          }
+        >
+          <Routes>
+            <Route path="/login" element={session ? <Navigate to="/" replace /> : <Auth />} />
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute session={session}>
+                  <Dashboard session={session!} />
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
+        </Suspense>
       </BrowserRouter>
     </>
   );

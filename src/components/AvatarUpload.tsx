@@ -235,6 +235,9 @@ export function AvatarUpload({
             <img
               src={displayImage}
               alt="User avatar"
+              width={96}
+              height={96}
+              loading="lazy"
               className="h-full w-full object-cover"
               onError={() => {
                 // If image fails to load (e.g. invalid URL), fallback gracefully
