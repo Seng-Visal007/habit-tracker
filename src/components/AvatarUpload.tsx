@@ -288,7 +288,7 @@ export function AvatarUpload({
           <div className="flex flex-col items-center gap-2 w-full animate-in fade-in-50">
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <ImageIcon className="h-3.5 w-3.5 text-primary" />
-              <span className="font-medium truncate max-w-[180px]">
+              <span className="font-medium truncate max-w-45">
                 {selectedFile?.name}
               </span>
               <span>

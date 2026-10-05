@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import type { Habit } from '@/types/database';
 import { supabase } from '@/lib/supabase';
+import { useOfflineQueue, type QueuedHabit } from '@/hooks/useOfflineQueue';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +15,9 @@ import {
   ListTodo,
   Loader2,
   Sparkles,
+  Share2,
+  Clock,
+  CheckCircle2,
 } from 'lucide-react';
 
 interface HabitListProps {
@@ -35,13 +39,20 @@ export function HabitList({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [shareStatus, setShareStatus] = useState<'idle' | 'copied' | 'shared'>('idle');
 
   // Deliberate crash guard for ErrorBoundary audit testing
   if (shouldCrash) {
     throw new Error('Simulated runtime failure in Habit List (Audit Checklist Test)');
   }
 
-  // Add a new habit
+  // Offline queue — adds habits locally when offline, syncs on reconnect
+  const { queue, addHabit, pendingCount } = useOfflineQueue(session, (synced) => {
+    // Merge newly-synced habits into the top of the list
+    onHabitsChange([...synced, ...habits]);
+  });
+
+  // Add a new habit (online: direct, offline: queued)
   const handleAddHabit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const trimmed = newTitle.trim();
@@ -49,15 +60,15 @@ export function HabitList({
 
     setIsSubmitting(true);
     try {
-      const { data, error } = await supabase
-        .from('habits')
-        .insert([{ title: trimmed, user_id: session.user.id }])
-        .select();
-
-      if (error) {
-        alert(error.message);
-      } else if (data && data[0]) {
-        onHabitsChange([data[0], ...habits]);
+      if (navigator.onLine) {
+        const data = await addHabit(trimmed);
+        if (data) {
+          onHabitsChange([data, ...habits]);
+          setNewTitle('');
+        }
+      } else {
+        // Queued offline — show optimistic UI feedback
+        await addHabit(trimmed);
         setNewTitle('');
       }
     } finally {
@@ -95,6 +106,44 @@ export function HabitList({
     }
   };
 
+  // Share button — Web Share API with clipboard fallback
+  const handleShare = async () => {
+    const text = [
+      `🎯 My HabitFlow – ${habits.length} habit${habits.length !== 1 ? 's' : ''} tracked!`,
+      '',
+      ...habits.slice(0, 5).map((h) => `• ${h.title}`),
+      habits.length > 5 ? `…and ${habits.length - 5} more` : '',
+      '',
+      'Try HabitFlow: build momentum, one habit at a time.',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'My HabitFlow Habits', text });
+        setShareStatus('shared');
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        setShareStatus('copied');
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.append(textarea);
+        textarea.select();
+        const copied = document.execCommand('copy');
+        textarea.remove();
+        if (copied) setShareStatus('copied');
+      }
+    } catch {
+      // User dismissed share sheet — not an error
+    }
+    setTimeout(() => setShareStatus('idle'), 2500);
+  };
+
   return (
     <Card className="shadow-sm border-border/80">
       <CardHeader className="flex flex-row items-center justify-between pb-4">
@@ -104,9 +153,37 @@ export function HabitList({
             My Daily Habits
           </CardTitle>
         </div>
-        <span className="text-xs font-medium text-muted-foreground bg-muted px-2.5 py-1 rounded-full">
-          {habits.length} {habits.length === 1 ? 'habit' : 'habits'}
-        </span>
+        <div className="flex items-center gap-2">
+          {/* Pending sync badge */}
+          {pendingCount > 0 && (
+            <span
+              title={`${pendingCount} habit${pendingCount !== 1 ? 's' : ''} queued for sync`}
+              className="flex items-center gap-1 text-xs font-medium text-amber-600 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full"
+            >
+              <Clock className="h-3 w-3" />
+              {pendingCount} queued
+            </span>
+          )}
+          <span className="hidden sm:inline text-xs font-medium text-muted-foreground bg-muted px-2.5 py-1 rounded-full">
+            {habits.length} {habits.length === 1 ? 'habit' : 'habits'}
+          </span>
+          {/* Share button */}
+          {habits.length > 0 && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={handleShare}
+              title={shareStatus === 'copied' ? 'Copied!' : shareStatus === 'shared' ? 'Shared!' : 'Share your habits'}
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            >
+              {shareStatus !== 'idle' ? (
+                <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+              ) : (
+                <Share2 className="w-3.5 h-3.5" />
+              )}
+            </Button>
+          )}
+        </div>
       </CardHeader>
 
       <CardContent className="space-y-5">
@@ -118,7 +195,7 @@ export function HabitList({
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
             disabled={isSubmitting}
-            className="flex-1"
+            className="flex-1 min-w-0"
           />
           <Button type="submit" disabled={isSubmitting || !newTitle.trim()} className="gap-1.5 shrink-0">
             {isSubmitting ? (
@@ -126,9 +203,28 @@ export function HabitList({
             ) : (
               <Plus className="w-4 h-4" />
             )}
-            <span>Add</span>
+            <span className="hidden sm:inline">Add</span>
           </Button>
         </form>
+
+        {/* Offline queued habits — shown at top with a pending badge */}
+        {queue.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-600/80">
+              Pending sync
+            </p>
+            {queue.map((item: QueuedHabit) => (
+              <div
+                key={item.id}
+                className="flex items-center gap-3 p-3.5 border border-dashed border-amber-400/40 rounded-xl bg-amber-500/5 text-amber-800 dark:text-amber-300"
+              >
+                <Clock className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                <span className="text-sm font-medium flex-1 truncate">{item.title}</span>
+                <span className="text-[10px] text-amber-500/70 shrink-0">offline</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Habit Items or State Message */}
         {loading ? (
@@ -136,7 +232,7 @@ export function HabitList({
             <Loader2 className="h-5 w-5 animate-spin text-primary" />
             <span className="text-sm">Loading your habits...</span>
           </div>
-        ) : habits.length === 0 ? (
+        ) : habits.length === 0 && queue.length === 0 ? (
           <div className="text-center py-12 px-4 border border-dashed rounded-xl bg-muted/20">
             <Sparkles className="h-8 w-8 mx-auto text-muted-foreground/60 mb-2" />
             <p className="text-sm font-medium text-foreground">No habits created yet</p>

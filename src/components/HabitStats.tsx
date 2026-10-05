@@ -19,7 +19,7 @@ export function HabitStats({ habits, shouldCrash = false }: HabitStatsProps) {
   const completionPercentage = totalCount > 0 ? Math.min(100, Math.round((activeCount / totalCount) * 85)) : 0;
 
   return (
-    <section className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 my-6">
+    <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 my-6">
       {/* Metric 1 */}
       <Card className="bg-card/70 backdrop-blur-xs border-border/80 shadow-xs hover:border-primary/30 transition-colors">
         <CardContent className="p-4 sm:p-5 flex items-center gap-3">

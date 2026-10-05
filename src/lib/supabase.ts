@@ -26,24 +26,4 @@ export const supabase = createClient<Database>(
   supabaseKey || 'placeholder-key'
 )
 
-// TypeScript helper types for Habit Tracker
-export interface Habit {
-  id: string
-  user_id?: string
-  name: string
-  description?: string
-  frequency: 'daily' | 'weekly' | 'custom'
-  target_days_per_week?: number
-  color?: string
-  icon?: string
-  created_at: string
-  archived?: boolean
-}
 
-export interface HabitLog {
-  id: string
-  habit_id: string
-  completed_date: string // YYYY-MM-DD
-  notes?: string
-  created_at: string
-}
